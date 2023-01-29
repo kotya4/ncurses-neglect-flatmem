@@ -5,12 +5,31 @@
 #include <stdarg.h>
 #include <signal.h>
 #include <stdio.h>
+#include <float.h>
 
+enum
+{
+	with_no_error = 0,
+	with_fmt_alloc_vsnprintf_error,
+	with_fmt_alloc_realloc_error,
+	with_fmt_alloc_infinit_loop_error,
+	with_fmt_alloc_calloc_error,
+	with_neglect_result_str_is_null_error,
+	with_neglect_result_error,
+	with_signal_handler_sigint,
+};
+
+// Allocates memory for string, formats string with vsnprintf, exits with error on failure, returns allocated string at success. If formatted string fits 32 bytes then string will be 32 bytes netherless formatted string real size.
 char *fmt_alloc(const char *fmt, ...)
 {
-	// Tip: this function used inside "internal_error" function, so cannot send verbose error mesages.
+	// Tip: this function used neglect_result, so cannot send verbose error mesages to stdout, because only neglect_result can safely use stdout.
 	size_t string_length = 32;
 	char *string = (char *)calloc(string_length, sizeof(char));
+	if(string == NULL)
+	{
+		exit(with_fmt_alloc_calloc_error);
+		return NULL;
+	}
 	for(int loop_counter = 2; loop_counter > 0; --loop_counter)
 	{
 		// Trying to fit fmt into string.
@@ -22,9 +41,15 @@ char *fmt_alloc(const char *fmt, ...)
 		{
 			// vsnprintf returns incompatible real_string_length_wo_0
 			free(string);
+			exit(with_fmt_alloc_vsnprintf_error);
 			return NULL;
 		}
-		if(real_string_length_wo_0 + 1 > string_length)
+		if(real_string_length_wo_0 < string_length)
+		{
+			// Ok.
+			return string;			
+		}
+		else
 		{
 			// Cannot fit fmt, must expand string capacity.
 			string_length = real_string_length_wo_0 + 1;
@@ -33,37 +58,36 @@ char *fmt_alloc(const char *fmt, ...)
 			{
 				// realloc not work
 				free(string);
+				exit(with_fmt_alloc_realloc_error);
 				return NULL;
 			}
 			string = new_string;
 		}
-		else
-		{
-			// Ok.
-			return string;
-		}
-		// Now string must fit fmt, if string cannot fit second time, then loop become infinite at some point, so must prevent it.
+		// Now string must fit fmt, if string cannot fit second time, then loop become infinit at some point, so must prevent it.
 	}
-	// Loop became infinite at some point, do not know why.
+	// Loop became infinit at some point, do not know why.
 	free(string);
+	exit(with_fmt_alloc_infinit_loop_error);
 	return NULL;
 }
 
-char *internal_error_str = NULL;
-#define internal_error(msg) internal_error_(__FILE__, __func__, __LINE__, msg)
-void internal_error_(const char *file, const char *func, const int line, const char *msg)
+// Checks if STATE is true, if so, exits with error.
+#define neglect(STATE) if(STATE) neglect_result(#STATE)
+char *neglect_result_str = NULL;
+#define neglect_result(C_STR) neglect_result_(__FILE__, __func__, __LINE__, C_STR)
+void neglect_result_(const char *file, const char *func, const int line, const char *msg)
 {
-	internal_error_str = fmt_alloc("Internal error in file '%s' function '%s' line '%i' msg '%s'", file, func, line, msg);
-	if(internal_error_str == NULL)
+	neglect_result_str = fmt_alloc("Neglected %s->%s->%i\t%s", file, func, line, msg);
+	if(neglect_result_str == NULL)
 	{
-		// fmt_alloc not work, vsnprintf or calloc or realloc returns error, or loop become infinite at some point
-		exit(2);
+		exit(with_neglect_result_str_is_null_error);
+		return;
 	}
-	exit(1);
+	exit(with_neglect_result_error);
+	return;
 }
 
-#define neglect(STATE) if(STATE) internal_error(#STATE)
-
+// Must be called before exit. 
 void before_exit()
 {
 	if(stdscr)
@@ -72,25 +96,28 @@ void before_exit()
 		endwin();
 		delwin(stdscr);
 	}
-	if(internal_error_str)
+	if(neglect_result_str)
 	{
-		fprintf(stdout, "%s\n", internal_error_str);
+		fprintf(stdout, "%s\n", neglect_result_str);
 		fflush(stdout);
-		free(internal_error_str);
+		free(neglect_result_str);
 	}
-	fprintf(stdout, "ok.\n");
+	fprintf(stdout, "Terminated.\n");
 	fflush(stdout);
 	return;
 }
 
+// Used to redefine signals behaviour.
 void signal_handler(int a)
 {
 	if(SIGINT == a)
 	{
-		exit(3);
+		exit(with_signal_handler_sigint);
+		return;
 	}
 }
 
+// Macro for lazy.
 #define for_range(V, S) for(int V=0; V<S; ++V)
 
 #include "perlin.h"
@@ -126,57 +153,42 @@ int main()
 
 	while(true)
 	{
+		float pmin=+FLT_MAX, pmax=-FLT_MAX;
 		for(int y=0; y<cols; ++y)
 		{
 			for(int x=0; x<rows / 2; ++x)
 			{
 				float p = perlin((float)(x + shiftx) / delta, (float)(y + shifty) / delta);
-				short pi = (short)((p + 1.f) / 2.f * 20) + 1;
+				if(pmin>p)pmin=p;
+				if(pmax<p)pmax=p;
+				
+				short pi = (short)((p * .5f + .5f) * colorspace) + 1;
 				attrset(COLOR_PAIR(pi));
 				mvprintw(y, x * 2, "  ");
 			}
 		}
-		mvprintw(0, 0, " %i ", shiftx);
-		mvprintw(1, 0, " %i ", shifty);
+		mvprintw(0, 0, " %1.0e * %i ", 1.f / delta, shiftx);
+		mvprintw(1, 0, " %1.0e * %i ", 1.f / delta, shifty);
+		mvprintw(2, 0, " perlin max %f ", pmax);
+		mvprintw(3, 0, " perlin min %f ", pmin);
 		refresh();
 		napms(100);
-		if(dshiftx)
+		if((dshiftx && abs(shiftx) % (rows / 2) == 0) || (shifty && abs(shifty) % cols == 0))
 		{
-			if(abs(shiftx) % (rows / 2) == 0)
+			dshiftx = 0;
+			dshifty = 0;			
+			if(rand() & 1)
 			{
-				napms(1000);
-				if(rand() & 1)
-				{
-					dshiftx = rand() & 1 ? -1 : +1;
-					dshifty = 0;
-				}
-				else
-				{
-					dshiftx = 0;
-					dshifty = rand() & 1 ? -1 : +1;
-				}
+				dshiftx = rand() & 1 ? -1 : +1;
 			}
-			shiftx += dshiftx;
-		}
-		else
-		{
-			if(abs(shifty) % cols == 0)
+			else
 			{
-				napms(1000);
-				if(rand() & 1)
-				{
-					dshiftx = rand() & 1 ? -1 : +1;
-					dshifty = 0;
-				}
-				else
-				{
-					dshiftx = 0;
-					dshifty = rand() & 1 ? -1 : +1;
-				}
+				dshifty = rand() & 1 ? -1 : +1;
 			}
-			shifty += dshifty;
 		}
+		shiftx += dshiftx;
+		shifty += dshifty;
 	}
 
-	return 0;
+	return with_no_error;
 }
