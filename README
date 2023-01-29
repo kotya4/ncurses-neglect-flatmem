@@ -1,0 +1,12 @@
+Hello.
+
+I want to write program in C, but I do not use gdb, so my first-of-all goal is to make program "unbreakabe" in runtime.
+
+So how to achive it?
+
+First, I need to "shell" all the standart C functions with check-functions.
+
+Second, I need to make my own functions for manage memory.
+
+Third, if I would make some working prototype of (any) program, i will automate reshelling all the shell-functions.
+
