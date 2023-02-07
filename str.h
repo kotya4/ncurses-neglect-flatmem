@@ -1,6 +1,17 @@
 #pragma once
 #include "neglect.h"
 
+// Returns length of a with \0
+int str_cat(char *a, const char *b)
+{
+	neglect(!a || !b);
+	size_t i;
+	for(i=0;a[i];++i);
+	for(;*b;++b)a[i++]=*b;
+	a[i]=0;
+	return i + 1;
+}
+
 // Returns 1 on success
 int str_cmp(const char *a, const char *b)
 {
@@ -11,8 +22,8 @@ int str_cmp(const char *a, const char *b)
 	return (*a==0&&*b==0);
 }
 
-int str_index(const char *a, const char *b)
 // Searches b in a, returns -1 if not found
+int str_index(const char *a, const char *b)
 {
 	neglect(!a || !b);
 	const char *sb = b;
@@ -28,8 +39,8 @@ int str_index(const char *a, const char *b)
 	return -1;
 }
 
-int str_len(const char *src)
 // Returns length of cstr w\o \0
+int str_len(const char *src)
 {
 	neglect(!src);
 	int len = 0;
@@ -43,10 +54,9 @@ int str_len(const char *src)
 // n - explicit number of values to copy (can be infinite)
 int str_copy(char *a, const char *b, int n)
 {
-	int i = 0;
-	for( ; b[i] && i < n-1; ++i)
-		a[i] = b[i];
-	a[i] = 0;
+	int i;
+	for(i=0; b[i] && i < n; ++i)a[i] = b[i];
+	//a[i] = 0;
 	return i;
 }
 
@@ -66,6 +76,7 @@ int str_to_int(const char *s)
 	return v;
 }
 
+/*
 #include <stdlib.h>
 
 char *str_dup(const char *src)
@@ -78,3 +89,4 @@ char *str_dup(const char *src)
 		out[i] = *src;
 	return out;
 }
+*/
